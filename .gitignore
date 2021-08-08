@@ -350,5 +350,5 @@ MigrationBackup/
 .ionide/
 
 .*/
-wwwroot/image/
+*/wwwroot/image/
 *.onnx

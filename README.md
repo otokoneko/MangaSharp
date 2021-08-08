@@ -8,6 +8,10 @@
 
 `model.quant` 模型为经过量化剪裁处理的模型，在部分较新的 CPU 以及 GPU 上的性能可能会高于 `model` 模型，但精度可能有所下降。
 
+## 示例
+
+![before](preview/before.jpg) ![after](preview/after.png)
+
 ## API实现进度
 
 - mangaEditor/upload
