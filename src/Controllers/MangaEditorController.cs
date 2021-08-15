@@ -9,6 +9,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Threading.Tasks;
+using Emgu.CV.Structure;
 
 namespace MangaSharp.Controllers
 {
@@ -31,7 +32,7 @@ namespace MangaSharp.Controllers
                 x.Pad(image.Width + 80, image.Height + 60, Color.White);
             });
 
-            image.Save(ms, PngFormat.Instance);
+            await image.SaveAsync(ms, PngFormat.Instance);
 
             using var engine = new Tesseract.TesseractEngine("tessdata", "jpn_vert", Tesseract.EngineMode.LstmOnly);
             using var pic = Tesseract.Pix.LoadFromMemory(ms.ToArray());
@@ -71,7 +72,7 @@ namespace MangaSharp.Controllers
 
             using var opencvImage = ImageUtils.Convert(image);
 
-            (var dict, var mask) = textSegmentation.Segmentate(image);
+            var (dict, mask) = textSegmentation.Segment(image);
 
             using var opencvMask = new Emgu.CV.Image<Emgu.CV.Structure.Gray, byte>(mask);
             using var opencvInpainted = opencvImage.InPaint(opencvMask, 10);
@@ -87,18 +88,18 @@ namespace MangaSharp.Controllers
                 id = md5,
                 fileName = "",
                 Ballons = new Dictionary<int, Ballon>(),
-                balloonCount = dict.Count,
+                balloonCount = dict.Length,
             };
 
-            for (var i = 0; i < dict.Count; i++)
+            for (var i = 0; i < dict.Length; i++)
             {
-                var rect = dict[i];
+                using var m = dict[i];
                 var boundingRect = new BoundingRect
                 {
-                    x = rect.MinX,
-                    y = rect.MinY,
-                    width = rect.MaxX - rect.MinX + 1,
-                    height = rect.MaxY - rect.MinY + 1,
+                    x = m.MinX,
+                    y = m.MinY,
+                    width = m.MaxX - m.MinX + 1,
+                    height = m.MaxY - m.MinY + 1,
                 };
                 var ballon = new Ballon
                 {
@@ -112,13 +113,15 @@ namespace MangaSharp.Controllers
                 ballon.textRects[0] = boundingRect;
                 root.Ballons[i] = ballon;
 
-                var ori = image.Clone(x => x
-                    .Crop(new Rectangle(boundingRect.x, boundingRect.y, boundingRect.width, boundingRect.height))
-                );
-                ori.Save($"./wwwroot/image/{md5}/{i}_ori.png");
+                var roi = new System.Drawing.Rectangle(boundingRect.x, boundingRect.y, boundingRect.width, boundingRect.height);
 
-                opencvInpainted.ROI = new System.Drawing.Rectangle(boundingRect.x, boundingRect.y, boundingRect.width, boundingRect.height);
+                using var dst = new Emgu.CV.Image<Bgr, byte>(boundingRect.width, boundingRect.height, new Bgr(255, 255, 255));
+                opencvImage.ROI = roi;
+                m.ROI.ROI = roi;
+                opencvImage.Copy(dst, m.ROI);
+                dst.Save($"./wwwroot/image/{md5}/{i}_ori.png");
 
+                opencvInpainted.ROI = roi;
                 opencvInpainted.Save($"./wwwroot/image/{md5}/{i}_f.png");
             }
 

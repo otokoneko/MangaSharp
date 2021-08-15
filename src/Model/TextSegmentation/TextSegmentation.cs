@@ -10,6 +10,8 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using Emgu.CV;
+using Emgu.CV.Structure;
 
 namespace MangaSharp.Model
 {
@@ -92,7 +94,7 @@ namespace MangaSharp.Model
             return mask;
         }
 
-        public Tuple<Dictionary<int, Rect>, byte[,,]> Segmentate(Image<Rgb24> image)
+        public Tuple<Mask[], byte[,,]> Segment(Image<Rgb24> image)
         {
             var width = image.Width;
             var height = image.Height;
@@ -128,43 +130,53 @@ namespace MangaSharp.Model
             Logger.LogInformation($"Number of text points: {number}");
 
             Dbscan.Dbscan2d(points.ToArray(), clusters, number, 20, 10);
+            
+            var arr = new Mask[clusters.Max() + 1];
 
-            var dict = new Dictionary<int, Rect>();
             for (var i = 0; i < number; i++)
             {
                 var cluster = clusters[i];
                 if (cluster < 0)
                     continue;
+
                 var x = points[i * 2];
                 var y = points[i * 2 + 1];
-                if (!dict.ContainsKey(cluster))
-                {
-                    dict.Add(cluster, new Rect(x, y, x, y));
-                }
-                dict[cluster].MinX = Math.Min(x, dict[cluster].MinX);
-                dict[cluster].MinY = Math.Min(y, dict[cluster].MinY);
-                dict[cluster].MaxX = Math.Max(x, dict[cluster].MaxX);
-                dict[cluster].MaxY = Math.Max(y, dict[cluster].MaxY);
+
+                arr[cluster] ??= new Mask(x, y, x, y, width, height);
+                var m = arr[cluster];
+
+                m.MinX = Math.Min(x, m.MinX);
+                m.MinY = Math.Min(y, m.MinY);
+                m.MaxX = Math.Max(x, m.MaxX);
+                m.MaxY = Math.Max(y, m.MaxY);
+                m.ROI[y, x] = new Gray(1);
             }
 
-            Logger.LogInformation($"Number of text clusters: {dict.Count}");
+            Logger.LogInformation($"Number of text clusters: {arr.Length}");
 
-            return new Tuple<Dictionary<int, Rect>, byte[,,]>(dict, maskImage);
+            return new Tuple<Mask[], byte[,,]>(arr, maskImage);
         }
 
-        public class Rect
+        public class Mask: IDisposable
         {
+            public Image<Gray, byte> ROI { get; set; }
             public int MinX { get; set; }
             public int MinY { get; set; }
             public int MaxX { get; set; }
             public int MaxY { get; set; }
 
-            public Rect(int minX, int minY, int maxX, int maxY)
+            public Mask(int minX, int minY, int maxX, int maxY, int width, int height)
             {
                 MinX = minX;
                 MinY = minY;
                 MaxX = maxX;
                 MaxY = maxY;
+                ROI = new Image<Gray, byte>(width, height, new Gray(0));
+            }
+
+            public void Dispose()
+            {
+                ROI.Dispose();
             }
         }
     }
